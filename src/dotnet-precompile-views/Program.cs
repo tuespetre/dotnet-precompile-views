@@ -12,7 +12,7 @@ namespace dotnet_precompile_views
             {
                 Name = "dotnet-precompile-views",
                 FullName = "ASP.NET Core MVC View Precompiler",
-                Description = "A tool for precompilation of Razor views within an MVC project"
+                Description = "A tool for precompiling ASP.NET Core MVC Razor views"
             };
 
             app.HelpOption("-h|--help");

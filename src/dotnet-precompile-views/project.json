@@ -9,7 +9,7 @@
   "packOptions": {
     "owners": [ "Derek Gray" ],
     "tags": [ "mvc", "aspnetcore", "razor", "precompile", "precompilation" ],
-    "summary": "A tool for precompiling razor views"
+    "summary": "A tool for precompiling ASP.NET Core MVC Razor views"
   },
 
   "dependencies": {
