@@ -1,6 +1,6 @@
 ﻿using Microsoft.DotNet.Cli.Utils;
 using Microsoft.Extensions.CommandLineUtils;
-using System;
+using Microsoft.Extensions.Internal;
 
 namespace dotnet_precompile_views
 {
@@ -12,52 +12,81 @@ namespace dotnet_precompile_views
             {
                 Name = "dotnet-precompile-views",
                 FullName = "ASP.NET Core MVC View Precompiler",
-                Description = "A tool for simple precompilation of Razor views within an MVC project"
+                Description = "A tool for precompilation of Razor views within an MVC project"
             };
+
             app.HelpOption("-h|--help");
 
-            var publishFolderOption = app.Option("-p|--publish-folder", "The path to the publish output folder", CommandOptionType.SingleValue);
-            var frameworkOption = app.Option("-f|--framework <FRAMEWORK>", "Target framework of application being published", CommandOptionType.SingleValue);
-            var configurationOption = app.Option("-c|--configuration <CONFIGURATION>", "Target configuration of application being published", CommandOptionType.SingleValue);
-            var projectPath = app.Argument("<PROJECT>", "The path to the project (project folder or project.json) being published. If empty the current directory is used.");
-            
+            var publishFolderOption = app.Option(
+                "-p|--publish-folder", 
+                "The path to the publish output folder", 
+                CommandOptionType.SingleValue);
+
+            var frameworkOption = app.Option(
+                "-f|--framework <FRAMEWORK>", 
+                "Target framework of application being published", 
+                CommandOptionType.SingleValue);
+
+            var configurationOption = app.Option(
+                "-c|--configuration <CONFIGURATION>", 
+                "Target configuration of application being published", 
+                CommandOptionType.SingleValue);
+
+            var projectPathArgument = app.Argument(
+                "<PROJECT>", 
+                "The path to the project (project folder or project.json) being published. If empty the current directory is used.");
+
+            var isDispatcher = DotnetToolDispatcher.IsDispatcher(args);
+
+            if (!isDispatcher)
+            {
+                DotnetToolDispatcher.EnsureValidDispatchRecipient(ref args);
+            }
+
             app.OnExecute(() =>
             {
                 var publishFolder = publishFolderOption.Value();
                 var framework = frameworkOption.Value();
+                var configuration = configurationOption.Value();
+                var projectPath = projectPathArgument.Value;
 
                 if (publishFolder == null || framework == null)
                 {
                     app.ShowHelp();
+
                     return 2;
+                }
+
+                if (isDispatcher)
+                {
+                    var dispatcherCommand = new DispatcherCommand(
+                        publishFolder,
+                        framework,
+                        configuration,
+                        projectPath);
+
+                    return dispatcherCommand.Run();
                 }
 
                 Reporter.Output.WriteLine($"Precompiling MVC views for the following project: '{publishFolder}'");
 
-                var command = new PrecompileViewsCommand(
+                var precompileViewsCommand = new PrecompileViewsCommand(
                     publishFolder,
                     framework,
-                    configurationOption.Value(),
-                    projectPath.Value);
-                
-                var exitCode = command.Run();
+                    configuration,
+                    projectPath);
 
-                Reporter.Output.WriteLine("Precompiling MVC views completed successfully");
+                var exitCode = precompileViewsCommand.Run();
+
+                if (exitCode == 0)
+                {
+                    Reporter.Output.WriteLine("Precompiling MVC views completed successfully");
+                }
 
                 return exitCode;
             });
 
-            try
-            {
-                return app.Execute(args);
-            }
-            catch (Exception e)
-            {
-                Reporter.Error.WriteLine(e.Message.Red());
-                Reporter.Output.WriteLine(e.ToString().Yellow());
-            }
-
-            return 1;
+            return app.Execute(args);
         }
     }
 }

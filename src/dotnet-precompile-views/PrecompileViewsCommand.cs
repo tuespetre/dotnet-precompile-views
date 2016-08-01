@@ -17,6 +17,10 @@ using System.Reflection;
 using System.Reflection.PortableExecutable;
 using System.Text;
 
+#if NETCOREAPP1_0
+using System.Runtime.Loader;
+#endif
+
 namespace dotnet_precompile_views
 {
     public class PrecompileViewsCommand
@@ -37,33 +41,20 @@ namespace dotnet_precompile_views
         public int Run()
         {
             var applicationBasePath = GetApplicationBasePath();
-            var services = BuildServiceProvider(applicationBasePath);
             var projectContext = GetProjectContext(applicationBasePath, framework);
+            // Needs to be called before BuildServiceProvider so that the
+            // DependencyContextRazorViewEngineOptionsSetup doesn't complain
+            // about not being able to find the assembly.
+            var metadataReferences = GetMetadataReferences(projectContext);
+            var services = BuildServiceProvider(projectContext);
+            var viewPaths = GetViewFilePaths(projectContext.ProjectDirectory);
             var razorHost = services.GetRequiredService<IMvcRazorHost>();
-            var trees = new List<SyntaxTree>();
-
-            foreach (var file in GetViewFilePaths(applicationBasePath))
-            {
-                using (var stream = File.OpenRead(file.AbsolutePath))
-                {
-                    var result = razorHost.GenerateCode(file.RelativePath, stream);
-
-                    if (result.Success)
-                    {
-                        var tree = CSharpSyntaxTree.ParseText(
-                            text: result.GeneratedCode,
-                            path: file.RelativePath,
-                            encoding: Encoding.UTF8);
-
-                        trees.Add(tree);
-                    }
-                }
-            }
+            var syntaxTrees = GetSyntaxTrees(razorHost, viewPaths);
 
             var compilation = CSharpCompilation.Create(
                 assemblyName: "precompiledviews",
-                syntaxTrees: trees,
-                references: GetMetadataReferences(projectContext),
+                syntaxTrees: syntaxTrees,
+                references: metadataReferences,
                 options: new CSharpCompilationOptions(
                     outputKind: OutputKind.DynamicallyLinkedLibrary));
 
@@ -86,8 +77,15 @@ namespace dotnet_precompile_views
 
                 if (!result.Success)
                 {
+                    Console.WriteLine(result.Diagnostics.Count());
+                    var builder = new StringBuilder();
+                    builder.AppendLine("Error creating compilation:");
+                    foreach (var error in result.Diagnostics)
+                    {
+                        builder.AppendLine(error.GetMessage());
+                    }
                     // TODO: Better handling... VS error reporting?
-                    throw new Exception();
+                    throw new Exception(builder.ToString());
                 }
 
                 assemblyStream.Seek(0, SeekOrigin.Begin);
@@ -103,10 +101,40 @@ namespace dotnet_precompile_views
             return 0;
         }
 
-        private IEnumerable<ViewPathTuple> GetViewFilePaths(string applicationBasePath)
+        private IEnumerable<SyntaxTree> GetSyntaxTrees(IMvcRazorHost razorHost, IEnumerable<ViewPathTuple> viewPaths)
+        {
+            foreach (var file in viewPaths)
+            {
+                using (var stream = File.OpenRead(file.AbsolutePath))
+                {
+                    var result = razorHost.GenerateCode(file.RelativePath, stream);
+
+                    if (!result.Success)
+                    {
+                        var builder = new StringBuilder();
+                        builder.AppendLine("Error creating syntax trees:");
+                        foreach (var error in result.ParserErrors)
+                        {
+                            builder.AppendLine(error.Message);
+                        }
+                        // TODO: Better handling... VS error reporting?
+                        throw new Exception(builder.ToString());
+                    }
+
+                    var tree = CSharpSyntaxTree.ParseText(
+                        text: result.GeneratedCode,
+                        path: file.RelativePath,
+                        encoding: Encoding.UTF8);
+
+                    yield return tree;
+                }
+            }
+        }
+
+        private IEnumerable<ViewPathTuple> GetViewFilePaths(string projectDirectory)
         {
             var matcher = new Matcher();
-            var directoryInfo = new DirectoryInfo(applicationBasePath);
+            var directoryInfo = new DirectoryInfo(projectDirectory);
             var directoryInfoWrapper = new DirectoryInfoWrapper(directoryInfo);
 
             matcher.AddInclude("**/*.cshtml");
@@ -116,7 +144,7 @@ namespace dotnet_precompile_views
             return matches.Files.Select(f => new ViewPathTuple
             {
                 RelativePath = f.Path,
-                AbsolutePath = Path.Combine(applicationBasePath, f.Path),
+                AbsolutePath = Path.Combine(projectDirectory, f.Path),
             });
         }
 
@@ -134,16 +162,17 @@ namespace dotnet_precompile_views
             return Directory.GetCurrentDirectory();
         }
 
-        private IServiceProvider BuildServiceProvider(string applicationBasePath)
+        private IServiceProvider BuildServiceProvider(ProjectContext projectContext)
         {
             var services = new ServiceCollection();
-            var contentRootPath = applicationBasePath;
+            var contentRootPath = projectContext.ProjectDirectory;
             var webRootPath = Path.Combine(contentRootPath, "wwwroot");
 
-            services.AddMvcCore();
+            services.AddMvcCore().AddViews().AddRazorViewEngine();
 
             services.AddSingleton<IHostingEnvironment>(new StubHostingEnvironment
             {
+                ApplicationName = projectContext.ProjectFile.Name,
                 ContentRootFileProvider = new PhysicalFileProvider(contentRootPath),
                 ContentRootPath = contentRootPath,
                 WebRootFileProvider = new PhysicalFileProvider(webRootPath),
@@ -153,32 +182,34 @@ namespace dotnet_precompile_views
             return services.BuildServiceProvider();
         }
 
-        private IEnumerable<MetadataReference> GetMetadataReferences(ProjectContext projectContext)
+        private IList<MetadataReference> GetMetadataReferences(ProjectContext projectContext)
         {
             var isPortable = !projectContext.TargetFramework.IsDesktop() && projectContext.IsPortable;
             var compilerOptions = projectContext.ProjectFile.GetCompilerOptions(projectContext.TargetFramework, configuration);
             var applicationName = compilerOptions.OutputName + (isPortable ? ".dll" : ".exe");
-            var applicationAssembly = Assembly.Load(new AssemblyName(Path.Combine(publishFolder, applicationName)));
+#if NETCOREAPP1_0
+            var applicationAssembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(Path.Combine(publishFolder, applicationName));
+#else
+            var applicationAssembly = Assembly.LoadFile(Path.Combine(publishFolder, applicationName));
+#endif
             var dependencyContext = DependencyContext.Load(applicationAssembly);
             var libraryPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var references = new List<MetadataReference>();
 
-            if (dependencyContext != null)
+            foreach (var library in dependencyContext.CompileLibraries)
             {
-                foreach (var library in dependencyContext.CompileLibraries)
+                foreach (var path in library.ResolveReferencePaths())
                 {
-                    foreach (var path in library.ResolveReferencePaths())
+                    if (libraryPaths.Add(path))
                     {
-                        if (libraryPaths.Add(path))
-                        {
-                            yield return CreateMetadataReference(path);
-                        }
+                        references.Add(CreateMetadataReference(path));
                     }
                 }
-
-                yield break;
             }
+            
+            references.Add(CreateMetadataReference(typeof(PrecompileViewsCommand).GetTypeInfo().Assembly.Location));
 
-            yield return CreateMetadataReference(applicationAssembly.Location);
+            return references;
         }
 
         private static MetadataReference CreateMetadataReference(string path)

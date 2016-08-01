@@ -20,22 +20,32 @@ namespace dotnet_precompile_views
             foreach (var type in node.BaseList.Types)
             {
                 var typeInfo = semanticModel.GetTypeInfo(type.Type);
-                var name = typeof(IRazorPage).FullName;
-                var desired = semanticModel.Compilation.GetTypeByMetadataName(name);
+                var razorPageInterface = semanticModel.Compilation.GetTypeByMetadataName(typeof(IRazorPage).FullName);
 
-                if (typeInfo.Type.AllInterfaces.Any(i => i == desired))
+                if (typeInfo.Type.AllInterfaces.Any(i => i == razorPageInterface))
                 {
-                    var attributeNamespace = typeof(ViewPathAttribute).Namespace;
-                    var attributeName = typeof(ViewPathAttribute).Name;
-                    var attrName = SyntaxFactory.QualifiedName(
-                        SyntaxFactory.IdentifierName(attributeNamespace),
-                        SyntaxFactory.IdentifierName(attributeName));
-                    var literalToken = SyntaxFactory.Literal(node.SyntaxTree.FilePath);
-                    var exprToken = SyntaxFactory.LiteralExpression(SyntaxKind.StringLiteralExpression, literalToken);
-                    var pathArg = SyntaxFactory.AttributeArgument(exprToken);
-                    var argList = SyntaxFactory.AttributeArgumentList(new SeparatedSyntaxList<AttributeArgumentSyntax>().Add(pathArg));
-                    var attribute = SyntaxFactory.Attribute(attrName, argList);
-                    var attributeList = SyntaxFactory.AttributeList(new SeparatedSyntaxList<AttributeSyntax>().Add(attribute));
+                    var attributeName = 
+                        SyntaxFactory.QualifiedName(
+                            SyntaxFactory.IdentifierName(typeof(ViewPathAttribute).Namespace),
+                            SyntaxFactory.IdentifierName(typeof(ViewPathAttribute).Name));
+
+                    var pathArgument = 
+                        SyntaxFactory.AttributeArgument(
+                            SyntaxFactory.LiteralExpression(
+                                SyntaxKind.StringLiteralExpression,
+                                SyntaxFactory.Literal(node.SyntaxTree.FilePath)));
+                    
+                    var attributeArgumentList = 
+                        SyntaxFactory.AttributeArgumentList(
+                            new SeparatedSyntaxList<AttributeArgumentSyntax>().Add(pathArgument));
+
+                    var attribute = 
+                            SyntaxFactory.Attribute(attributeName, attributeArgumentList);
+
+                    var attributeList = 
+                        SyntaxFactory.AttributeList(
+                            new SeparatedSyntaxList<AttributeSyntax>().Add(attribute));
+
                     return node.AddAttributeLists(attributeList);
                 }
             }

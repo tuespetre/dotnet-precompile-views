@@ -1,8 +1,15 @@
 ﻿{
   "version": "1.0.0-*",
+
   "buildOptions": {
     "emitEntryPoint": true,
     "outputName": "dotnet-precompile-views"
+  },
+
+  "packOptions": {
+    "owners": [ "Derek Gray" ],
+    "tags": [ "mvc", "aspnetcore", "razor", "precompile", "precompilation" ],
+    "summary": "A tool for precompiling razor views"
   },
 
   "dependencies": {
@@ -10,13 +17,21 @@
     "Microsoft.DotNet.Cli.Utils": "1.0.0-*",
     "Microsoft.Extensions.CommandLineUtils": "1.0.0",
     "Microsoft.Extensions.DependencyInjection": "1.0.0",
-    "Microsoft.NETCore.App": {
-      "type": "platform",
-      "version": "1.0.0"
+    "Microsoft.Extensions.DotnetToolDispatcher.Sources": {
+      "type": "build",
+      "version": "1.0.0-*"
     }
   },
 
   "frameworks": {
-    "netcoreapp1.0": {}
+    "net461": {},
+    "netcoreapp1.0": {
+      "dependencies": {
+        "Microsoft.NETCore.App": {
+          "type": "platform",
+          "version": "1.0.0"
+        }
+      }
+    }
   }
 }
