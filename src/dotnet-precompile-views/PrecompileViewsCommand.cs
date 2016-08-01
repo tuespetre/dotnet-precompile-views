@@ -168,6 +168,12 @@ namespace dotnet_precompile_views
             var contentRootPath = projectContext.ProjectDirectory;
             var webRootPath = Path.Combine(contentRootPath, "wwwroot");
 
+            if (!Directory.Exists(webRootPath))
+            {
+                // Should this be an error?
+                webRootPath = contentRootPath;
+            }
+
             services.AddMvcCore().AddViews().AddRazorViewEngine();
 
             services.AddSingleton<IHostingEnvironment>(new StubHostingEnvironment
