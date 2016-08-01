@@ -6,10 +6,17 @@
     "outputName": "dotnet-precompile-views"
   },
 
+  "title": "dotnet-precompile-views",
+  "projectUrl": "https://github.com/tuespetre/dotnet-precompile-views",
+
   "packOptions": {
     "owners": [ "Derek Gray" ],
     "tags": [ "mvc", "aspnetcore", "razor", "precompile", "precompilation" ],
-    "summary": "A tool for precompiling ASP.NET Core MVC Razor views"
+    "summary": "A tool for precompiling ASP.NET Core MVC Razor views",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/tuespetre/dotnet-precompile-views.git"
+    }
   },
 
   "dependencies": {
