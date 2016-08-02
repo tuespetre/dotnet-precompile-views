@@ -40,7 +40,7 @@ namespace dotnet_precompile_views
                             new SeparatedSyntaxList<AttributeArgumentSyntax>().Add(pathArgument));
 
                     var attribute = 
-                            SyntaxFactory.Attribute(attributeName, attributeArgumentList);
+                        SyntaxFactory.Attribute(attributeName, attributeArgumentList);
 
                     var attributeList = 
                         SyntaxFactory.AttributeList(
