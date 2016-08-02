@@ -77,7 +77,6 @@ namespace dotnet_precompile_views
 
                 if (!result.Success)
                 {
-                    Console.WriteLine(result.Diagnostics.Count());
                     var builder = new StringBuilder();
                     builder.AppendLine("Error creating compilation:");
                     foreach (var error in result.Diagnostics)
